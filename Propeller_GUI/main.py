@@ -3,8 +3,6 @@ from tkinter import ttk, messagebox
 from ttkthemes import ThemedTk
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
 import serial
 import serial.tools.list_ports
 import os
@@ -199,6 +197,27 @@ class TestApp(ThemedTk):
             self.engine_tab, text="Add Engine", command=self.add_engine)
         add_button.grid(row=len(labels) + 1, column=0, columnspan=2, pady=10)
 
+        # Создание фрейма для списка двигателей и прокрутки
+        self.engine_list_frame = ttk.Frame(self.engine_tab)
+        self.engine_list_frame.grid(row=len(labels) + 2, column=0, columnspan=2, pady=10, sticky='nsew')
+
+        # Создание списка для отображения двигателей
+        self.engine_listbox = tk.Listbox(self.engine_list_frame, selectmode='single')
+        self.engine_listbox.pack(side='left', fill='both', expand=True)
+
+        # Создание полосы прокрутки для списка
+        scrollbar = ttk.Scrollbar(self.engine_list_frame, orient='vertical', command=self.engine_listbox.yview)
+        scrollbar.pack(side='right', fill='y')
+
+        self.engine_listbox.config(yscrollcommand=scrollbar.set)
+
+        # Кнопка для удаления выбранного двигателя
+        remove_button = ttk.Button(self.engine_tab, text="Remove Selected", command=self.remove_selected_engine)
+        remove_button.grid(row=len(labels) + 3, column=0, columnspan=2, pady=10)
+
+        # Обновляем список двигателей
+        self.update_engine_list()
+
     def create_propeller_tab(self):
         self.propeller_tab = ttk.Frame(self.notebook)
         self.notebook.add(self.propeller_tab, text="Add Propeller")
@@ -226,6 +245,27 @@ class TestApp(ThemedTk):
             self.propeller_tab, text="Add Propeller", command=self.add_propeller)
         add_button.grid(row=len(labels) + 1, column=0, columnspan=2, pady=10)
 
+        # Создание фрейма для списка пропеллеров и прокрутки
+        self.propeller_list_frame = ttk.Frame(self.propeller_tab)
+        self.propeller_list_frame.grid(row=len(labels) + 2, column=0, columnspan=2, pady=10, sticky='nsew')
+
+        # Создание списка для отображения пропеллеров
+        self.propeller_listbox = tk.Listbox(self.propeller_list_frame, selectmode='single')
+        self.propeller_listbox.pack(side='left', fill='both', expand=True)
+
+        # Создание полосы прокрутки для списка
+        scrollbar = ttk.Scrollbar(self.propeller_list_frame, orient='vertical', command=self.propeller_listbox.yview)
+        scrollbar.pack(side='right', fill='y')
+
+        self.propeller_listbox.config(yscrollcommand=scrollbar.set)
+
+        # Кнопка для удаления выбранного пропеллера
+        remove_button = ttk.Button(self.propeller_tab, text="Remove Selected", command=self.remove_selected_propeller)
+        remove_button.grid(row=len(labels) + 3, column=0, columnspan=2, pady=10)
+
+        # Обновляем список пропеллеров
+        self.update_propeller_list()
+
     def create_test_info_tab(self):
         """Создает вкладку с историей тестов"""
         self.test_info_tab = ttk.Frame(self.notebook)
@@ -250,7 +290,7 @@ class TestApp(ThemedTk):
         if not os.path.exists(self.test_history_file) or os.path.getsize(self.test_history_file) == 0:
             # Если тестов нет, показываем стильное сообщение
             no_tests_label = ttk.Label(self.test_list_frame, text="No tests have been conducted yet.",
-                                       font=("Arial", 16), foreground="red")
+                                       font=("Arial", 16), foreground="gray")
             no_tests_label.pack(pady=20)
         else:
             # Если тесты есть, создаем список
@@ -291,7 +331,7 @@ class TestApp(ThemedTk):
         details_label.pack(fill='x')
 
     @staticmethod
-    def toggle_details(self, frame):
+    def toggle_details(frame):
         """Скрыть/показать детали теста"""
         if frame.winfo_viewable():
             frame.pack_forget()
@@ -376,7 +416,6 @@ class TestApp(ThemedTk):
             self.test_result_label.config(
                 text="No ports available", foreground="red")
             return
-
         try:
             with serial.Serial(selected_port, 9600, timeout=2) as ser:
                 ser.write(b"START\n")
@@ -391,17 +430,83 @@ class TestApp(ThemedTk):
             self.test_result_label.config(text=f"Error: {e}", foreground="red")
 
     def add_engine(self):
-        engine_data = {label: entry.get()
-                       for label, entry in self.engine_entries.items()}
-        with open(self.engine_file, 'a') as f:
-            f.write(','.join(engine_data.values()) + '\n')
+        engine_data = {label: entry.get() for label, entry in self.engine_entries.items()}
+        if all(engine_data.values()):  # Проверка, что все поля заполнены
+            with open(self.engine_file, 'a') as f:
+                f.write(','.join(engine_data.values()) + '\n')
+            messagebox.showinfo("Success", "Engine added successfully!")
+            for entry in self.engine_entries.values():
+                entry.delete(0, tk.END)
+            self.update_dropdowns()  # Обновление выпадающего списка
+            self.update_engine_list()
+        else:
+            messagebox.showwarning("Input Error", "Please fill in all fields!")
+
+    def update_engine_list(self):
+        """Обновляет список двигателей в Listbox."""
+        self.engine_listbox.delete(0, tk.END)
+        if os.path.exists(self.engine_file):
+            with open(self.engine_file, 'r') as file:
+                for line in file:
+                    self.engine_listbox.insert(tk.END, line.strip())
+
+    def remove_selected_engine(self):
+        """Удаляет выбранный двигатель из списка и файла."""
+        selected_index = self.engine_listbox.curselection()
+        if not selected_index:
+            messagebox.showwarning("Selection Error", "No engine selected.")
+            return
+
+        selected_engine = self.engine_listbox.get(selected_index)
+        with open(self.engine_file, 'r') as file:
+            lines = file.readlines()
+
+        with open(self.engine_file, 'w') as file:
+            for line in lines:
+                if line.strip() != selected_engine:
+                    file.write(line)
+
+        self.update_engine_list()
         self.update_dropdowns()
 
     def add_propeller(self):
-        propeller_data = {label: entry.get()
-                          for label, entry in self.propeller_entries.items()}
-        with open(self.propeller_file, 'a') as f:
-            f.write(','.join(propeller_data.values()) + '\n')
+        propeller_data = {label: entry.get() for label, entry in self.propeller_entries.items()}
+        if all(propeller_data.values()):  # Проверка, что все поля заполнены
+            with open(self.propeller_file, 'a') as f:
+                f.write(','.join(propeller_data.values()) + '\n')
+            messagebox.showinfo("Success", "Propeller added successfully!")
+            for entry in self.propeller_entries.values():
+                entry.delete(0, tk.END)
+            self.update_dropdowns()  # Обновление выпадающего списка
+            self.update_propeller_list()
+        else:
+            messagebox.showwarning("Input Error", "Please fill in all fields!")
+
+    def update_propeller_list(self):
+        """Обновляет список пропеллеров в Listbox."""
+        self.propeller_listbox.delete(0, tk.END)
+        if os.path.exists(self.propeller_file):
+            with open(self.propeller_file, 'r') as file:
+                for line in file:
+                    self.propeller_listbox.insert(tk.END, line.strip())
+
+    def remove_selected_propeller(self):
+        """Удаляет выбранный пропеллер из списка и файла."""
+        selected_index = self.propeller_listbox.curselection()
+        if not selected_index:
+            messagebox.showwarning("Selection Error", "No propeller selected.")
+            return
+
+        selected_propeller = self.propeller_listbox.get(selected_index)
+        with open(self.propeller_file, 'r') as file:
+            lines = file.readlines()
+
+        with open(self.propeller_file, 'w') as file:
+            for line in lines:
+                if line.strip() != selected_propeller:
+                    file.write(line)
+
+        self.update_propeller_list()
         self.update_dropdowns()
 
     def update_dropdowns(self):
